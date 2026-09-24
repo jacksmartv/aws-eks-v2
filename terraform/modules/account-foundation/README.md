@@ -89,7 +89,7 @@ Testing this module in isolation with `terraform apply` followed by `terraform d
 
 ```
 terragrunt/
-├── terragrunt.hcl                          # root: backend + provider generation, default_tags
+├── root.hcl                                 # root: backend + provider generation, default_tags
 ├── _accounts/
 │   └── nonprod/account.hcl                 # account_id, account_name
 └── live/nonprod/us-east-1/dev/
@@ -97,6 +97,6 @@ terragrunt/
     └── foundation/terragrunt.hcl           # reads env.hcl + account.hcl, invokes this module
 ```
 
-`env.hcl` holds the same kind of values as `terraform.tfvars.example` (account name, KMS admin ARNs, role trust principals, etc.), but scoped to one environment and shared by every unit in it — change it once, every unit in that environment picks it up. Nothing here is duplicated per-module the way a per-module `.tfvars` file would be. See `terragrunt/README.md` (added when the Terragrunt tree is built — see ROADMAP.md Step 3) for the full pattern.
+`env.hcl` holds the same kind of values as `terraform.tfvars.example` (account name, KMS admin ARNs, role trust principals, etc.), but scoped to one environment and shared by every unit in it — change it once, every unit in that environment picks it up. Nothing here is duplicated per-module the way a per-module `.tfvars` file would be. See [`terragrunt/README.md`](../../../terragrunt/README.md) for the full pattern.
 
 If you're only working inside `terraform/modules/account-foundation/`, use option 1. If you're deploying a real environment, option 2 is the only path that matters — the `.tfvars.example` file is a development convenience, not a second supported way to run this project.
