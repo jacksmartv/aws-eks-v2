@@ -1,0 +1,34 @@
+# Example variable values for the account-foundation module.
+#
+# This file is for standalone testing of this module only (e.g. `terraform
+# plan -var-file=terraform.tfvars.example` from within this directory). It
+# is NOT how this module is actually invoked in the real environment tree —
+# that happens via Terragrunt, which generates inputs from
+# terragrunt/live/<account>/<region>/<env>/env.hcl instead of a .tfvars
+# file. See ROADMAP.md Step 3.
+#
+# Copy this to terraform.tfvars (gitignored) to experiment locally.
+
+account_name = "sandbox"
+
+state_bucket_name          = null # defaults to "<account_name>-terraform-state"
+state_bucket_force_destroy = true # only ever true in a throwaway sandbox account
+
+kms_deletion_window_in_days = 7 # shorter window for a sandbox; use 30 for real environments
+
+kms_key_administrator_arns = [
+  # "arn:aws:iam::123456789012:role/platform-admin",
+]
+
+# Leave these empty to test the module without creating any IAM roles yet
+# (useful for a first apply before the GitHub OIDC provider/roles exist —
+# see README.md, Prerequisites).
+plan_role_trusted_principal_arns          = []
+apply_role_trusted_principal_arns         = []
+developer_readonly_trusted_principal_arns = []
+
+sso_instance_arn = null
+
+tags = {
+  ManagedBy = "terraform"
+}
