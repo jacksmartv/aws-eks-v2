@@ -12,7 +12,8 @@ terragrunt/
 └── live/
     └── <account>/<region>/<env>/
         ├── env.hcl                         # the ONE file that defines this environment's values
-        ├── foundation/terragrunt.hcl       # invokes terraform/modules/account-foundation
+        ├── github-oidc/terragrunt.hcl      # invokes terraform/modules/github-oidc — applies FIRST
+        ├── foundation/terragrunt.hcl       # invokes terraform/modules/account-foundation — depends on github-oidc
         ├── network/terragrunt.hcl          # invokes terraform/modules/network (not yet built)
         ├── ecr/terragrunt.hcl              # invokes terraform/modules/ecr-repositories (not yet built)
         ├── eks-cluster/terragrunt.hcl      # invokes terraform/modules/eks-cluster (not yet built)
@@ -42,6 +43,26 @@ account_vars = read_terragrunt_config(
 ```
 
 If the hierarchy depth ever changes (e.g. a level is added or removed between `live/` and a unit), this relative path needs updating everywhere it appears — currently that's the root `root.hcl` and every unit's `terragrunt.hcl` under `live/`.
+
+## Dependencies between units: `dependency` + `mock_outputs`
+
+Some units need another unit's real output — `foundation` needs `github-oidc`'s `plan_role_arn`/`apply_role_arn` to know which roles to trust with state-bucket access. This is expressed with Terragrunt's `dependency` block, not by hand-copying an ARN into `env.hcl`:
+
+```hcl
+dependency "github_oidc" {
+  config_path = "../github-oidc"
+
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+  mock_outputs = {
+    plan_role_arn  = "arn:aws:iam::000000000000:role/mock-plan-role"
+    apply_role_arn = "arn:aws:iam::000000000000:role/mock-apply-role"
+  }
+}
+```
+
+`mock_outputs` matter in practice, not just as a nicety: before `github-oidc` has ever been applied, it has no real Terraform state to read outputs from. Without a mock, `terragrunt plan`/`render` on `foundation` would fail outright. With one, `foundation` can be planned/rendered on its own — using obviously-fake placeholder ARNs — restricted to read-only commands (`mock_outputs_allowed_terraform_commands`) so a real `apply` can never accidentally run against mock data. Once `github-oidc` is actually applied, Terragrunt reads its real state and `foundation` picks up the real ARNs automatically — no manual step.
+
+**Apply order therefore matters**: `github-oidc` first, then `foundation`. `terragrunt run-all apply` (once more units exist) resolves this automatically via the dependency graph; applying a single unit by hand, run `github-oidc` before `foundation`.
 
 ## Running a unit
 

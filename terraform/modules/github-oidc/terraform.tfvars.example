@@ -1,0 +1,38 @@
+# Example variable values for the github-oidc module.
+#
+# This file is for standalone testing of this module only (e.g. `terraform
+# plan -var-file=terraform.tfvars.example` from within this directory). It
+# is NOT how this module is actually invoked in the real environment tree —
+# that happens via Terragrunt, which generates inputs from
+# terragrunt/live/<account>/<region>/<env>/env.hcl instead of a .tfvars
+# file, and reads this module's outputs into account-foundation via a
+# `dependency` block. See ROADMAP.md Step 4 and terragrunt/README.md's
+# "Dependencies between units" section.
+#
+# Copy this to terraform.tfvars (gitignored) to experiment locally.
+
+github_repository = "jacksmartv/aws-eks-v2"
+
+# Leave true unless a GitHub Actions OIDC provider already exists in this
+# AWS account — there can only be one per account per provider URL, so a
+# second attempt to create one fails. If this account already has one
+# (e.g. set up outside this project, or by another module), set this to
+# false and pass its ARN via existing_oidc_provider_arn instead.
+create_oidc_provider       = true
+existing_oidc_provider_arn = null
+
+plan_role_name  = "github-actions-plan"
+apply_role_name = "github-actions-apply"
+
+# Left null to use this module's defaults: plan_role_ref_condition matches
+# any ref in github_repository (broad, deliberate — plan is read-only by
+# design at the destination, see account-foundation's plan-role policy);
+# apply_role_ref_condition matches only the main branch (narrow, deliberate
+# — apply has real read/write access to Terraform state). Override only if
+# this project's branching model changes.
+plan_role_ref_condition  = null
+apply_role_ref_condition = null
+
+tags = {
+  ManagedBy = "terraform"
+}

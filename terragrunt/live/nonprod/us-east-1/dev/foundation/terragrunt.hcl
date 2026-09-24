@@ -15,6 +15,22 @@ locals {
   )
 }
 
+# github-oidc must apply before foundation — its plan/apply role ARNs feed
+# directly into foundation's trust-principal inputs below. mock_outputs lets
+# `terragrunt plan` on foundation work even before github-oidc has ever been
+# applied (e.g. on a first `render`/`plan` dry run) — same dependency +
+# mock_outputs pattern ADR-002 keeps from the original project's Terragrunt
+# design.
+dependency "github_oidc" {
+  config_path = "../github-oidc"
+
+  mock_outputs_allowed_terraform_commands = ["plan", "validate", "init"]
+  mock_outputs = {
+    plan_role_arn  = "arn:aws:iam::000000000000:role/mock-plan-role"
+    apply_role_arn = "arn:aws:iam::000000000000:role/mock-apply-role"
+  }
+}
+
 terraform {
   source = "../../../../../terraform/modules/account-foundation"
 }
@@ -26,8 +42,8 @@ inputs = {
   kms_deletion_window_in_days = local.env_vars.locals.kms_deletion_window_in_days
   kms_key_administrator_arns  = local.env_vars.locals.kms_key_administrator_arns
 
-  plan_role_trusted_principal_arns          = local.env_vars.locals.plan_role_trusted_principal_arns
-  apply_role_trusted_principal_arns         = local.env_vars.locals.apply_role_trusted_principal_arns
+  plan_role_trusted_principal_arns          = [dependency.github_oidc.outputs.plan_role_arn]
+  apply_role_trusted_principal_arns         = [dependency.github_oidc.outputs.apply_role_arn]
   developer_readonly_trusted_principal_arns = local.env_vars.locals.developer_readonly_trusted_principal_arns
 
   sso_instance_arn = local.env_vars.locals.sso_instance_arn

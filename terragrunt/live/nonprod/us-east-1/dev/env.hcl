@@ -32,13 +32,18 @@ locals {
 
   kms_key_administrator_arns = []
 
-  # Left empty until the GitHub Actions OIDC provider + roles exist for this
-  # account (see terraform/modules/account-foundation/README.md,
-  # Prerequisites). No role is created by account-foundation until these
-  # are populated.
-  plan_role_trusted_principal_arns          = []
-  apply_role_trusted_principal_arns         = []
+  # plan_role_trusted_principal_arns / apply_role_trusted_principal_arns are
+  # NOT set here — foundation/terragrunt.hcl gets them from the github-oidc
+  # unit's outputs via a Terragrunt `dependency` block (Step 4), not from
+  # this file. Those two roles don't exist as static data; they're created
+  # by Terraform, so their ARNs have to come from that unit's real output,
+  # not be guessed/hardcoded in env.hcl.
   developer_readonly_trusted_principal_arns = []
 
   sso_instance_arn = null
+
+  # --- github-oidc module inputs (Step 4) ---
+  # "org/repo" the OIDC trust policies are scoped to — no other GitHub
+  # repository can assume the plan/apply roles this unit creates.
+  github_repository = "jacksmartv/aws-eks-v2"
 }

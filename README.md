@@ -20,7 +20,7 @@ This is not another EKS Terraform module, and it is not a fork or an incremental
 ```
 aws-eks-base-v2/
 ├── terraform/
-│   ├── modules/        # Reusable building blocks (account-foundation, eks-cluster, gitops-bootstrap, ...)
+│   ├── modules/        # Reusable building blocks (account-foundation, github-oidc, eks-cluster, gitops-bootstrap, ...)
 │   └── layers/          # Per-account/region/env Terraform roots, one per Terragrunt unit
 ├── terragrunt/
 │   ├── root.hcl         # Root config: backend + provider generation
@@ -49,7 +49,7 @@ Terraform and Terragrunt versions are pinned per-project via [`tfenv`](https://g
 
 Every unit lives under `terragrunt/live/<account>/<region>/<env>/<unit>/`. A unit's inputs come from exactly two files: `terragrunt/_accounts/<account>/account.hcl` (account-level data — account ID, whether it's the AWS Organizations payer account) and `terragrunt/live/<account>/<region>/<env>/env.hcl` (everything else for that environment — region, cost-allocation tags, and every module input for every unit in that environment). Change a value once, in `env.hcl`; every unit in that environment picks it up. See ADR-002 for why the hierarchy is structured this way.
 
-**Before the first apply in a new account**, read `terraform/modules/account-foundation/README.md`'s Prerequisites section — an AWS account, bootstrap SSO credentials, and (eventually) a GitHub Actions OIDC provider all need to exist first; none of them are created by this project's Terraform.
+**Before the first apply in a new account**, read `terraform/modules/account-foundation/README.md`'s Prerequisites section — an AWS account and bootstrap SSO credentials need to exist first; neither is created by this project's Terraform. The GitHub Actions OIDC provider and the roles it assumes ARE created by this project (`terraform/modules/github-oidc/`), but that module has to apply before `account-foundation` — see `terragrunt/README.md`'s "Dependencies between units" section.
 
 ```sh
 # From inside a unit directory, e.g. terragrunt/live/nonprod/us-east-1/dev/foundation/
