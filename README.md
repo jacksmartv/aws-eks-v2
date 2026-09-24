@@ -23,7 +23,7 @@ aws-eks-base-v2/
 │   ├── modules/        # Reusable building blocks (account-foundation, eks-cluster, gitops-bootstrap, ...)
 │   └── layers/          # Per-account/region/env Terraform roots, one per Terragrunt unit
 ├── terragrunt/
-│   ├── terragrunt.hcl   # Root config: backend + provider generation
+│   ├── root.hcl         # Root config: backend + provider generation
 │   ├── _accounts/       # Account-level configuration (account.hcl per AWS account)
 │   └── live/            # The actual environment tree: <account>/<region>/<env>/<unit>
 ├── gitops/               # Reconciled by Argo CD — never touched by `terraform apply`
@@ -40,6 +40,31 @@ See [MASTERPLAN.md §3](./MASTERPLAN.md) for the full annotated tree and the rea
 ## The core rule
 
 Terraform installs exactly one Kubernetes workload, ever: the GitOps controller. Nothing else — not a metrics-server "because it's tiny," not a CRD "because it's small." Everything else that runs on the cluster is reconciled by GitOps, with zero Terraform awareness of its existence. This boundary is enforced in CI, not just documented — see ADR-001.
+
+## Toolchain
+
+Terraform and Terragrunt versions are pinned per-project via [`tfenv`](https://github.com/tfutils/tfenv) and [`tgenv`](https://github.com/cunymatthieu/tgenv) — see `.terraform-version` and `.terragrunt-version` at the repo root. Run `tfenv install` / `tgenv install` once; both tools pick up the pinned version automatically from any directory inside this repo afterward.
+
+## Running this project (Terragrunt)
+
+Every unit lives under `terragrunt/live/<account>/<region>/<env>/<unit>/`. A unit's inputs come from exactly two files: `terragrunt/_accounts/<account>/account.hcl` (account-level data — account ID, whether it's the AWS Organizations payer account) and `terragrunt/live/<account>/<region>/<env>/env.hcl` (everything else for that environment — region, cost-allocation tags, and every module input for every unit in that environment). Change a value once, in `env.hcl`; every unit in that environment picks it up. See ADR-002 for why the hierarchy is structured this way.
+
+**Before the first apply in a new account**, read `terraform/modules/account-foundation/README.md`'s Prerequisites section — an AWS account, bootstrap SSO credentials, and (eventually) a GitHub Actions OIDC provider all need to exist first; none of them are created by this project's Terraform.
+
+```sh
+# From inside a unit directory, e.g. terragrunt/live/nonprod/us-east-1/dev/foundation/
+
+terragrunt render --format json    # inspect the fully-resolved config (inputs, backend, provider) without touching AWS
+terragrunt plan                    # requires valid AWS credentials for the target account
+terragrunt apply
+terragrunt destroy
+```
+
+`terragrunt render` is worth running first, especially in a new environment — it resolves every `include`/`read_terragrunt_config` call and prints the exact backend config, provider block, and module inputs Terragrunt would use, with zero risk (no AWS credentials needed, nothing is created).
+
+**KMS note**: destroying and immediately re-applying `foundation` in the same account is safe — AWS frees a deleted KMS alias for reuse immediately, even while the key it used to point to sits in `PendingDeletion` for its full deletion window. See `terraform/modules/account-foundation/README.md` for the sourced explanation; this applies identically whether the module is run standalone or through Terragrunt, since it's AWS KMS behavior, not something either tool controls.
+
+Formatting: `terragrunt hcl format` (from the `terragrunt/` directory) formats every `.hcl` file in the tree; `terragrunt hcl format --check --diff` verifies formatting without changing anything (used in CI).
 
 ## Author
 
