@@ -1,0 +1,58 @@
+# --- Planning documents (intentionally excluded until Phase 1 Step 8) ---
+# These are still living/changing during implementation. Committed manually
+# once Phase 1 is validated end-to-end. See ROADMAP.md, Step 8.
+/ADR.md
+/ASSESSMENT.md
+/MASTERPLAN.md
+/ROADMAP.md
+
+# --- Terraform ---
+**/.terraform/*
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+*.tfstate.backup-*
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json
+!*.tfvars.example
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+.terraformrc
+terraform.rc
+*.tfplan
+
+# --- Terragrunt ---
+**/.terragrunt-cache/*
+.terragrunt-cache/
+
+# --- Provider/module lock backups (keep the real lock file, ignore ad hoc backups) ---
+.terraform.lock.hcl.backup*
+
+# --- Secrets / credentials (defense in depth alongside gitleaks) ---
+*.pem
+*.key
+!**/templates/*.key
+.env
+.env.*
+!.env.example
+*_rsa
+*_ed25519
+*.p12
+
+# --- OS / editor noise ---
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/
+!.vscode/extensions.json
+
+# --- Local scratch ---
+*.local
+*.bak
+*.tmp
