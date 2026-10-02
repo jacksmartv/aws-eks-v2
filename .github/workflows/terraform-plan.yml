@@ -1,0 +1,141 @@
+name: Terraform Plan
+
+# Runs on every pull request that touches Terraform or Terragrunt code.
+# Authenticates to AWS via GitHub Actions OIDC (terraform/modules/github-oidc's
+# plan role — read-only on state, lock-file write only), never static keys.
+# See ROADMAP.md Step 5.
+
+# on:
+#   pull_request:
+#     paths:
+#       - "terraform/**"
+#       - "terragrunt/**"
+#       - ".github/workflows/terraform-plan.yml"
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for OIDC — https://github.com/aws-actions/configure-aws-credentials
+  contents: read
+  pull-requests: write # required to post the plan output as a PR comment
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  # ---------------------------------------------------------------------
+  # Hard gate: the Terraform/GitOps boundary (ADR-001).
+  #
+  # Terraform installs exactly one Kubernetes workload, ever: the GitOps
+  # controller bootstrap. This job fails the PR outright — not a lint
+  # warning — if any helm_release, kubectl_manifest, or non-allowlisted
+  # kubernetes_* resource appears anywhere in terraform/ outside
+  # terraform/modules/gitops-bootstrap/**. Runs first and blocks the rest
+  # of the pipeline: there is no reason to plan/lint code that already
+  # violates this project's core invariant.
+  # ---------------------------------------------------------------------
+  boundary-check:
+    name: Terraform / GitOps boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fail on helm_release/kubectl_manifest/kubernetes_* outside gitops-bootstrap
+        run: |
+          set -euo pipefail
+
+          # Every *.tf file under terraform/, excluding the one module
+          # allowed to touch the Kubernetes API: gitops-bootstrap. That
+          # module's own allowlist (namespace/RBAC scaffolding for the
+          # GitOps controller itself) is enforced by code review on that
+          # module specifically, not by this blanket scan — see ADR-001's
+          # "precise wording" note for why the exception is bounded, not
+          # a loophole.
+          violations=$(find terraform -type f -name "*.tf" \
+            -not -path "terraform/modules/gitops-bootstrap/*" \
+            -exec grep -lE '^\s*resource\s+"(helm_release|kubectl_manifest|kubernetes_[a-z_]+)"' {} \; || true)
+
+          if [ -n "$violations" ]; then
+            echo "::error::Terraform/GitOps boundary violated (ADR-001). Terraform may only manage the GitOps controller bootstrap — everything else that runs on Kubernetes belongs in gitops/, reconciled by Argo CD, never in terraform/."
+            echo "The following files declare a Kubernetes resource outside terraform/modules/gitops-bootstrap/:"
+            echo "$violations"
+            exit 1
+          fi
+
+          echo "No Terraform/GitOps boundary violations found."
+
+  plan:
+    name: fmt / validate / tflint / trivy / plan
+    runs-on: ubuntu-latest
+    needs: boundary-check
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # One job per Terragrunt unit that currently exists. Extend this
+        # list as new units are added (network, ecr, eks-cluster,
+        # gitops-bootstrap) — there is deliberately no dynamic
+        # directory-discovery here yet, so a new unit is a one-line
+        # addition to this matrix, not implicit/automatic inclusion.
+        unit:
+          - terragrunt/live/nonprod/us-east-1/dev/github-oidc
+          - terragrunt/live/nonprod/us-east-1/dev/foundation
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read pinned tool versions
+        id: versions
+        run: |
+          echo "terraform=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+          echo "terragrunt=$(cat .terragrunt-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+
+      - name: Install Terragrunt
+        run: |
+          curl -sL "https://github.com/gruntwork-io/terragrunt/releases/download/v${{ steps.versions.outputs.terragrunt }}/terragrunt_linux_amd64" -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.PLAN_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terraform fmt (check)
+        run: terraform fmt -check -recursive terraform/
+
+      - name: terragrunt hcl format (check)
+        working-directory: terragrunt
+        run: terragrunt hcl format --check --diff
+
+      - uses: terraform-linters/setup-tflint@v6
+        with:
+          tflint_version: v0.64.0
+
+      - name: tflint
+        run: |
+          tflint --init
+          tflint --recursive --chdir terraform/
+
+      - name: Trivy (IaC misconfiguration scan)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: terraform/
+          exit-code: "1"
+          severity: "CRITICAL,HIGH"
+        # tfsec is deprecated (absorbed into Trivy, no new rules since
+        # 2023) — this replaces the tfsec-based scan an earlier version
+        # of this project's plan called for. See MASTERPLAN.md's CI/CD
+        # technology-decisions note.
+
+      - name: terragrunt plan
+        working-directory: ${{ matrix.unit }}
+        run: terragrunt plan -no-color

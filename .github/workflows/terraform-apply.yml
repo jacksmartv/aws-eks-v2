@@ -1,0 +1,83 @@
+name: Terraform Apply
+
+# Authenticates to AWS via GitHub Actions OIDC (terraform/modules/github-oidc's
+# apply role — trusted only for main-branch workflow runs, per that module's
+# default ref condition). Gated behind a GitHub Environment requiring manual
+# approval: nothing here applies unattended. See ROADMAP.md Step 5.
+#
+# Automatic trigger on push to main is deliberately disabled for now (kept
+# here, commented out, for when it's re-enabled) — applies are run by hand
+# via workflow_dispatch until there's real confidence in this pipeline
+# against a real AWS account. terraform-plan.yml is the mandatory PR gate;
+# this workflow is not.
+#
+# on:
+#   push:
+#     branches:
+#       - main
+#     paths:
+#       - "terraform/**"
+#       - "terragrunt/**"
+#       - ".github/workflows/terraform-apply.yml"
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  id-token: write # required for OIDC — https://github.com/aws-actions/configure-aws-credentials
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  apply:
+    name: terragrunt apply
+    runs-on: ubuntu-latest
+    # Requires a "production" environment configured in this repository's
+    # Settings > Environments with at least one required reviewer. Without
+    # that configuration this job runs unattended on every merge to main —
+    # setting it up is a one-time manual step outside Terraform's reach
+    # (GitHub environment protection rules aren't exposed as a Terraform
+    # resource for this purpose in a way that avoids a chicken-and-egg
+    # bootstrap problem), and is a hard prerequisite before this workflow
+    # is trusted with real infrastructure.
+    environment: production
+    strategy:
+      fail-fast: false
+      max-parallel: 1 # units apply one at a time, in dependency order
+      matrix:
+        include:
+          - unit: terragrunt/live/nonprod/us-east-1/dev/github-oidc
+          - unit: terragrunt/live/nonprod/us-east-1/dev/foundation
+        # Order matters: github-oidc before foundation (foundation depends
+        # on github-oidc's outputs — see terragrunt/README.md's
+        # "Dependencies between units" section). `matrix.include` preserves
+        # list order, and max-parallel: 1 makes that order the apply order.
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Read pinned tool versions
+        id: versions
+        run: |
+          echo "terraform=$(cat .terraform-version)" >> "$GITHUB_OUTPUT"
+          echo "terragrunt=$(cat .terragrunt-version)" >> "$GITHUB_OUTPUT"
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform }}
+          terraform_wrapper: false
+
+      - name: Install Terragrunt
+        run: |
+          curl -sL "https://github.com/gruntwork-io/terragrunt/releases/download/v${{ steps.versions.outputs.terragrunt }}/terragrunt_linux_amd64" -o /usr/local/bin/terragrunt
+          chmod +x /usr/local/bin/terragrunt
+
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.APPLY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: terragrunt apply
+        working-directory: ${{ matrix.unit }}
+        run: terragrunt apply -auto-approve -no-color
