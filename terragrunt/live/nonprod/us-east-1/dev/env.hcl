@@ -63,4 +63,25 @@ locals {
 
   network_flow_logs_retention_days       = 14
   network_flow_logs_bucket_force_destroy = true # sandbox only — never true in a real environment
+
+  # --- ecr-repositories module inputs (Step 12) ---
+  # The only place that decides which apps have an ECR repository in this
+  # account/region/environment — adding an app is a line here, not a
+  # module edit. Real TicketSocket app names, not placeholders.
+  ecr_repository_names = [
+    "ts-admin-tickets",
+    "front/ts-admin-seated-ticketing",
+  ]
+
+  # Empty = this project's default model (one account per environment,
+  # ADR-002) — no namespace prefix needed. Populate only if this account
+  # is shared across multiple environments, TicketSocket v1's real model.
+  ecr_namespaces = []
+
+  ecr_image_tag_mutability = "IMMUTABLE"
+  ecr_scan_on_push         = true
+
+  ecr_lifecycle_policy_keep_last_n = 10 # TicketSocket v1's own default
+
+  ecr_repository_force_delete = true # sandbox only — never true in a real environment
 }

@@ -1,0 +1,33 @@
+# Example variable values for the ecr-repositories module.
+#
+# This file is for standalone testing of this module only (e.g. `terraform
+# plan -var-file=terraform.tfvars.example` from within this directory). It
+# is NOT how this module is actually invoked in the real project — that
+# happens via Terragrunt, which generates inputs from
+# terragrunt/live/<account>/<region>/<env>/env.hcl instead of a .tfvars
+# file. See ROADMAP.md Step 12.
+#
+# Copy this to terraform.tfvars (gitignored) to experiment locally. Delete
+# it when done — see account-foundation's README for why a stray
+# terraform.tfvars left in a module directory silently contaminates any
+# later terragrunt plan/apply that uses this module as source.
+
+# Flat/default model (ADR-002: one account per environment) — no namespace
+# prefix. Use real app names, not placeholders.
+repository_names = [
+  "ts-admin-tickets",
+  "front/ts-admin-seated-ticketing",
+]
+
+ecr_namespaces = [] # empty = flat model above. Populate (e.g. ["dev", "staging"]) only if this account is shared across multiple environments.
+
+image_tag_mutability = "IMMUTABLE"
+scan_on_push         = true
+
+lifecycle_policy_keep_last_n = 10 # TicketSocket v1's own default
+
+repository_force_delete = true # only ever true in a throwaway sandbox account
+
+tags = {
+  ManagedBy = "terraform"
+}
