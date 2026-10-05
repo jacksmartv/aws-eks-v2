@@ -6,13 +6,13 @@ The environment-composition layer of this project (ADR-002). Terraform owns what
 
 ```
 terragrunt/
-├── root.hcl                                # root: generates the S3 backend + AWS provider blocks for every unit
+├── root.hcl                                # root: generates the S3 backend (most units) + AWS provider blocks for every unit
 ├── _accounts/
 │   └── <account>/account.hcl               # one file per AWS account — account_id, is_payer_account
 └── live/
     └── <account>/<region>/<env>/
         ├── env.hcl                         # the ONE file that defines this environment's values
-        ├── github-oidc/terragrunt.hcl      # invokes terraform/modules/github-oidc — applies FIRST
+        ├── github-oidc/terragrunt.hcl      # invokes terraform/modules/github-oidc — applies FIRST, local state (see below)
         ├── foundation/terragrunt.hcl       # invokes terraform/modules/account-foundation — depends on github-oidc
         ├── network/terragrunt.hcl          # invokes terraform/modules/network (not yet built)
         ├── ecr/terragrunt.hcl              # invokes terraform/modules/ecr-repositories (not yet built)
@@ -21,6 +21,8 @@ terragrunt/
 ```
 
 Four levels: account → region → environment → unit. Each level is a directory; nothing about the hierarchy is encoded as a conditional inside an `.hcl` file — see ADR-002 for why that distinction matters.
+
+> A second account, `floci-local`, exists alongside `nonprod` — not a real AWS account, but a local emulator ([Floci](https://github.com/floci-io/floci)) used to exercise this hierarchy with real `terragrunt apply` runs at zero cost. Same structure, same units, no code path aware of the difference. See [`local/README.md`](../local/README.md).
 
 ## The two data files, and why there are exactly two
 
@@ -62,7 +64,7 @@ dependency "github_oidc" {
 
 `mock_outputs` matter in practice, not just as a nicety: before `github-oidc` has ever been applied, it has no real Terraform state to read outputs from. Without a mock, `terragrunt plan`/`render` on `foundation` would fail outright. With one, `foundation` can be planned/rendered on its own — using obviously-fake placeholder ARNs — restricted to read-only commands (`mock_outputs_allowed_terraform_commands`) so a real `apply` can never accidentally run against mock data. Once `github-oidc` is actually applied, Terragrunt reads its real state and `foundation` picks up the real ARNs automatically — no manual step.
 
-**Apply order therefore matters**: `github-oidc` first, then `foundation`. `terragrunt run-all apply` (once more units exist) resolves this automatically via the dependency graph; applying a single unit by hand, run `github-oidc` before `foundation`.
+**Apply order therefore matters**: `github-oidc` first, then `foundation`. This is **not** automatic via `terragrunt run-all apply`, though — `github-oidc` deliberately keeps local Terraform state permanently rather than joining the shared S3 backend every other unit uses (see that unit's `terragrunt.hcl` and `local/README.md`'s "A real design gap this stack caught" for why: a genuine circular bootstrap dependency, since the shared state bucket is itself created by `account-foundation`, which `github-oidc` must apply before). A unit on local state isn't discoverable by `run-all`'s remote-state-based dependency graph the way a normal unit is. In practice: apply `github-oidc` by hand first (a one-time, human-only operation), then `terragrunt run-all apply` works normally for every unit downstream of it.
 
 ## Running a unit
 

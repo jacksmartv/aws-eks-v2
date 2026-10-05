@@ -32,7 +32,8 @@ aws-eks-base-v2/
 │   └── apps/              # Platform addons (Karpenter, cert-manager, ESO, ...), one directory each
 ├── docs/
 │   └── optional-patterns/ # Documented but not shipped: patterns for things deliberately kept out of core
-└── .github/workflows/    # CI: plan/apply via OIDC, policy scanning
+├── .github/workflows/    # CI: terraform-plan.yml (OIDC + fmt/validate/tflint/trivy + GitOps boundary gate), terraform-apply.yml (OIDC, gated by GitHub Environment)
+└── local/                # Local dev stack (Floci, a free AWS emulator) — investigation/testing aid, not part of the deployable architecture
 ```
 
 See [MASTERPLAN.md §3](./MASTERPLAN.md) for the full annotated tree and the reasoning behind it.
@@ -65,6 +66,21 @@ terragrunt destroy
 **KMS note**: destroying and immediately re-applying `foundation` in the same account is safe — AWS frees a deleted KMS alias for reuse immediately, even while the key it used to point to sits in `PendingDeletion` for its full deletion window. See `terraform/modules/account-foundation/README.md` for the sourced explanation; this applies identically whether the module is run standalone or through Terragrunt, since it's AWS KMS behavior, not something either tool controls.
 
 Formatting: `terragrunt hcl format` (from the `terragrunt/` directory) formats every `.hcl` file in the tree; `terragrunt hcl format --check --diff` verifies formatting without changing anything (used in CI).
+
+## Local development
+
+[`local/`](./local/) runs [Floci](https://github.com/floci-io/floci), a free local AWS emulator, via Docker Compose — a way to run real `terragrunt plan`/`apply` against every unit in this project (including EKS, once `eks-cluster` exists) with zero AWS cost and zero risk to this project's one real AWS account. See [local/README.md](./local/README.md) for setup, and for two real issues this stack caught early: a broken module `source` path, and a circular state-bucket bootstrap dependency resolved by giving `github-oidc` a permanent local Terraform backend.
+
+## Continuous integration
+
+Two workflows in `.github/workflows/`, both authenticating to AWS via GitHub Actions OIDC (`terraform/modules/github-oidc`) — no static AWS access keys anywhere in this repo.
+
+- **`terraform-plan.yml`** — runs on every pull request touching `terraform/` or `terragrunt/`. First job (`boundary-check`) is a hard gate enforcing ADR-001: it fails the PR outright if any `helm_release`, `kubectl_manifest`, or non-allowlisted `kubernetes_*` resource appears anywhere in `terraform/` outside `terraform/modules/gitops-bootstrap/`. The second job runs `terraform fmt -check`, `terragrunt hcl format --check`, `tflint`, a Trivy IaC config scan (`aquasecurity/trivy-action` — Trivy replaces tfsec here; tfsec has been in maintenance-only mode since its rules were absorbed into Trivy in 2023), and `terragrunt plan` for every unit, authenticated with the **plan** role.
+- **`terraform-apply.yml`** — runs on every push to `main` touching the same paths (i.e., after a PR has merged). Gated behind a GitHub Environment named `production` requiring manual approval — nothing applies unattended. Authenticated with the **apply** role, which by default only trusts `main`-branch workflow runs (see `terraform/modules/github-oidc`'s `apply_role_ref_condition`). Applies units one at a time, in dependency order (`github-oidc` before `foundation`).
+
+**Repository configuration required before either workflow can run** (one-time, manual — not created by this project's Terraform, to avoid a chicken-and-egg bootstrap problem):
+- Repository variables (Settings → Secrets and variables → Actions → Variables): `PLAN_ROLE_ARN` and `APPLY_ROLE_ARN`, set to the `plan_role_arn`/`apply_role_arn` outputs of the `github-oidc` unit once it's been applied at least once via a human with SSO credentials (see `terraform/modules/github-oidc/README.md`).
+- A `production` GitHub Environment (Settings → Environments) with at least one required reviewer, so `terraform-apply.yml` pauses for approval instead of applying unattended on every merge.
 
 ## Author
 
