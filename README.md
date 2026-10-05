@@ -75,12 +75,23 @@ Formatting: `terragrunt hcl format` (from the `terragrunt/` directory) formats e
 
 Two workflows in `.github/workflows/`, both authenticating to AWS via GitHub Actions OIDC (`terraform/modules/github-oidc`) — no static AWS access keys anywhere in this repo.
 
-- **`terraform-plan.yml`** — runs on every pull request touching `terraform/` or `terragrunt/`. First job (`boundary-check`) is a hard gate enforcing ADR-001: it fails the PR outright if any `helm_release`, `kubectl_manifest`, or non-allowlisted `kubernetes_*` resource appears anywhere in `terraform/` outside `terraform/modules/gitops-bootstrap/`. The second job runs `terraform fmt -check`, `terragrunt hcl format --check`, `tflint`, a Trivy IaC config scan (`aquasecurity/trivy-action` — Trivy replaces tfsec here; tfsec has been in maintenance-only mode since its rules were absorbed into Trivy in 2023), and `terragrunt plan` for every unit, authenticated with the **plan** role.
-- **`terraform-apply.yml`** — runs on every push to `main` touching the same paths (i.e., after a PR has merged). Gated behind a GitHub Environment named `production` requiring manual approval — nothing applies unattended. Authenticated with the **apply** role, which by default only trusts `main`-branch workflow runs (see `terraform/modules/github-oidc`'s `apply_role_ref_condition`). Applies units one at a time, in dependency order (`github-oidc` before `foundation`).
+- **`terraform-plan.yml`** — triggered manually (`workflow_dispatch`) for now rather than automatically on every pull request, until there's real confidence in the pipeline against a real AWS account (the original `pull_request` trigger is kept commented out in the file for when it's re-enabled). First job (`boundary-check`) is a hard gate enforcing ADR-001: it fails the run outright if any `helm_release`, `kubectl_manifest`, or non-allowlisted `kubernetes_*` resource appears anywhere in `terraform/` outside `terraform/modules/gitops-bootstrap/`. The second job runs `terraform fmt -check`, `terragrunt hcl format --check`, `tflint`, a Trivy IaC config scan (`aquasecurity/trivy-action` — Trivy replaces tfsec here; tfsec has been in maintenance-only mode since its rules were absorbed into Trivy in 2023), and `terragrunt plan` for every unit, authenticated with the **plan** role.
+- **`terraform-apply.yml`** — also triggered manually (`workflow_dispatch`) for now rather than automatically on push to `main`, for the same reason (the original trigger is likewise kept commented out). Gated behind a GitHub Environment named `production` requiring manual approval — nothing applies unattended. Authenticated with the **apply** role, which by default only trusts `main`-branch workflow runs (see `terraform/modules/github-oidc`'s `apply_role_ref_condition`). Applies units one at a time, in dependency order (`github-oidc` before `foundation`).
 
 **Repository configuration required before either workflow can run** (one-time, manual — not created by this project's Terraform, to avoid a chicken-and-egg bootstrap problem):
 - Repository variables (Settings → Secrets and variables → Actions → Variables): `PLAN_ROLE_ARN` and `APPLY_ROLE_ARN`, set to the `plan_role_arn`/`apply_role_arn` outputs of the `github-oidc` unit once it's been applied at least once via a human with SSO credentials (see `terraform/modules/github-oidc/README.md`).
 - A `production` GitHub Environment (Settings → Environments) with at least one required reviewer, so `terraform-apply.yml` pauses for approval instead of applying unattended on every merge.
+
+## Secret scanning
+
+[`gitleaks`](https://github.com/gitleaks/gitleaks) runs on every commit via `.pre-commit-config.yaml`, scanning staged changes for hardcoded credentials before they reach git history. Added after auditing a real, multi-year production fork of this project turned up several real hardcoded credentials (MongoDB Atlas creds, an SSH private key, AWS key pairs) committed despite the correct pattern (Secrets Manager + External Secrets Operator) already existing in the same codebase — having the right pattern available doesn't stop it from being bypassed under pressure; an automated gate does.
+
+```sh
+brew install pre-commit   # one-time, per machine
+pre-commit install        # one-time, per clone — wires the git hook
+```
+
+No `.gitleaks.toml` yet — gitleaks' built-in default ruleset runs with zero configuration. This is the local, pre-commit-only layer; a hard CI-level gate (blocking merges outright, plus a one-time full-history scan) is a separate, later addition — see `MASTERPLAN.md`'s Phase 9 scope.
 
 ## Author
 
