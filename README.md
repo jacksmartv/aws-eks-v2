@@ -21,7 +21,7 @@ This is not another EKS Terraform module, and it is not a fork or an incremental
 ```
 aws-eks-base-v2/
 ├── terraform/
-│   ├── modules/        # Reusable building blocks (account-foundation, github-oidc, eks-cluster, gitops-bootstrap, ...) — invoked directly by a single Terragrunt unit when one module is enough
+│   ├── modules/        # Reusable building blocks (account-foundation, github-oidc, network, eks-cluster, gitops-bootstrap, ...) — invoked directly by a single Terragrunt unit when one module is enough
 │   └── layers/          # Reserved for when a unit needs to compose more than one module into one apply — not yet used; see ROADMAP.md's Phase 2 note
 ├── terragrunt/
 │   ├── root.hcl         # Root config: backend + provider generation
