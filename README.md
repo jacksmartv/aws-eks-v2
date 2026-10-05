@@ -12,6 +12,7 @@ This is not another EKS Terraform module, and it is not a fork or an incremental
 - **[MASTERPLAN.md](./MASTERPLAN.md)** — the executable plan: phase-by-phase scope, deliverables, acceptance criteria, repository tree, dependency graph, cost architecture, disaster recovery posture.
 - **[ADR.md](./ADR.md)** — the architecture decision records. Nine decisions (000–008), each with context, alternatives considered, and consequences. Start with ADR-000 (ownership boundaries) — everything else is checked against it.
 - **[ASSESSMENT.md](./ASSESSMENT.md)** — the Phase 0 assessment that shaped this design: current-state findings and the reasoning behind each decision.
+- **[docs/architecture.md](./docs/architecture.md)** — operational runbooks and documented trade-offs (state recovery, access-model notes) that don't fit a module's own README or the step-by-step checklist. Grows incrementally, one phase at a time.
 
 > Note: `ADR.md`, `ASSESSMENT.md`, `MASTERPLAN.md`, and `ROADMAP.md` are intentionally excluded from version control, indefinitely — not a temporary state until some milestone (see `.gitignore`). They exist only as the author's local living design/tracking documents; nothing about the plan they describe lives in this repository's git history, only the actual code it produces.
 
@@ -20,8 +21,8 @@ This is not another EKS Terraform module, and it is not a fork or an incremental
 ```
 aws-eks-base-v2/
 ├── terraform/
-│   ├── modules/        # Reusable building blocks (account-foundation, github-oidc, eks-cluster, gitops-bootstrap, ...)
-│   └── layers/          # Per-account/region/env Terraform roots, one per Terragrunt unit
+│   ├── modules/        # Reusable building blocks (account-foundation, github-oidc, eks-cluster, gitops-bootstrap, ...) — invoked directly by a single Terragrunt unit when one module is enough
+│   └── layers/          # Reserved for when a unit needs to compose more than one module into one apply — not yet used; see ROADMAP.md's Phase 2 note
 ├── terragrunt/
 │   ├── root.hcl         # Root config: backend + provider generation
 │   ├── _accounts/       # Account-level configuration (account.hcl per AWS account)
@@ -31,6 +32,7 @@ aws-eks-base-v2/
 │   ├── clusters/         # Per-cluster overlays
 │   └── apps/              # Platform addons (Karpenter, cert-manager, ESO, ...), one directory each
 ├── docs/
+│   ├── architecture.md    # Operational runbooks and documented trade-offs — grows incrementally, one phase at a time
 │   └── optional-patterns/ # Documented but not shipped: patterns for things deliberately kept out of core
 ├── .github/workflows/    # CI: terraform-plan.yml (OIDC + fmt/validate/tflint/trivy + GitOps boundary gate), terraform-apply.yml (OIDC, gated by GitHub Environment)
 └── local/                # Local dev stack (Floci, a free AWS emulator) — investigation/testing aid, not part of the deployable architecture
@@ -51,6 +53,8 @@ Terraform and Terragrunt versions are pinned per-project via [`tfenv`](https://g
 Every unit lives under `terragrunt/live/<account>/<region>/<env>/<unit>/`. A unit's inputs come from exactly two files: `terragrunt/_accounts/<account>/account.hcl` (account-level data — account ID, whether it's the AWS Organizations payer account) and `terragrunt/live/<account>/<region>/<env>/env.hcl` (everything else for that environment — region, cost-allocation tags, and every module input for every unit in that environment). Change a value once, in `env.hcl`; every unit in that environment picks it up. See ADR-002 for why the hierarchy is structured this way.
 
 **Before the first apply in a new account**, read `terraform/modules/account-foundation/README.md`'s Prerequisites section — an AWS account and bootstrap SSO credentials need to exist first; neither is created by this project's Terraform. The GitHub Actions OIDC provider and the roles it assumes ARE created by this project (`terraform/modules/github-oidc/`), but that module has to apply before `account-foundation` — see `terragrunt/README.md`'s "Dependencies between units" section.
+
+**`foundation`'s own very first `apply` in a new account needs a different procedure than the plain `terragrunt apply` below** — it creates the S3 bucket its own state is meant to live in, which is a real self-reference problem, not a one-off quirk of this account. See `terraform/modules/account-foundation/README.md`'s "The first-ever apply in a real account" section before running anything against a brand-new account — skipping it produces a `BucketAlreadyExists` error (with `--backend-bootstrap`) or a hanging prompt (with a bare `-migrate-state`), not a working apply.
 
 ```sh
 # From inside a unit directory, e.g. terragrunt/live/nonprod/us-east-1/dev/foundation/

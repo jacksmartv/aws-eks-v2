@@ -170,7 +170,7 @@ data "aws_iam_policy_document" "state_kms_key_policy" {
     condition {
       test     = "StringEquals"
       variable = "kms:ViaService"
-      values   = ["s3.${data.aws_region.current.name}.amazonaws.com"]
+      values   = ["s3.${data.aws_region.current.region}.amazonaws.com"]
     }
   }
 }
@@ -202,7 +202,7 @@ data "aws_iam_policy_document" "ebs_kms_key_policy" {
     condition {
       test     = "StringEquals"
       variable = "kms:ViaService"
-      values   = ["ec2.${data.aws_region.current.name}.amazonaws.com"]
+      values   = ["ec2.${data.aws_region.current.region}.amazonaws.com"]
     }
   }
 }

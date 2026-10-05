@@ -6,7 +6,7 @@ This module runs **once per AWS account**, not once per environment — see MAST
 
 ## Prerequisites — what must already exist in AWS before running this module
 
-This module creates the state backend itself, which means the very first `terraform apply` for a new account has to run **without** the S3 backend this module is about to create (a classic bootstrap chicken-and-egg problem). The following must exist beforehand, none of it created by this module:
+This module creates the state backend itself, which means the very first `terraform apply` for a new account has to run **without** the S3 backend this module is about to create — a real self-reference problem, not just a theoretical one (see "The first-ever apply in a real account" below for the exact procedure and the failure mode it avoids). The following must exist beforehand, none of it created by this module:
 
 1. **An AWS account.** Sandbox, nonprod, or prod — this module does not create AWS Organizations accounts, it only configures resources inside one that already exists.
 2. **Bootstrap credentials with account-admin-equivalent permissions**, used once, locally or from a one-off CI run, to apply this module for the very first time (before the state bucket and the three state-access roles exist, nothing else can apply changes to this account). In practice this is typically an AWS IAM Identity Center (SSO) permission set with `AdministratorAccess`, assumed manually for the initial apply — **not** a long-lived IAM user. Once this module's outputs exist, all subsequent applies in this account go through `apply-role` instead; the bootstrap credential is not needed again unless the state bucket itself needs to be rebuilt from scratch.
@@ -18,11 +18,12 @@ This module creates the state backend itself, which means the very first `terraf
 1. Account exists (AWS Organizations or standalone)
 2. SSO admin permission set assumable in the account (manual, one-time)
 3. terraform apply (with the SSO admin session's temporary credentials, no backend config yet — local state)
-4. Migrate state into the bucket this module just created (terraform init -migrate-state, now pointed at the new backend)
+4. Migrate state into the bucket this module just created
 5. Apply `terraform/modules/github-oidc` for this account (creates the OIDC provider + plan/apply roles)
 6. Pass those roles' ARNs into plan_role_trusted_principal_arns / apply_role_trusted_principal_arns
 7. terraform apply again — CI can now plan/apply this account without the bootstrap credential
 ```
+Steps 3–4 are the real work, and the exact procedure (including the one real failure mode hit while validating this against Floci) is spelled out below, in "The first-ever apply in a real account" — this list is the overview, that section is what to actually run.
 
 ## What this module does
 
@@ -80,6 +81,21 @@ Testing this module in isolation with `terraform apply` followed by `terraform d
 - **IAM roles**: destroy cleanly, no residue. (The example tfvars leave all three `*_trusted_principal_arns` empty, so none of the three roles are even created in a default standalone test.)
 - **EBS encryption-by-default / default KMS key setting**: account-level configuration, reverts cleanly.
 - **The two KMS keys (`state`, `ebs`) do NOT disappear immediately.** AWS enforces a mandatory waiting period before actually deleting a KMS key — `terraform destroy` only schedules deletion; the key stays in `PendingDeletion` state for `kms_deletion_window_in_days` (the example tfvars use `7`, AWS's minimum), and it keeps counting toward your account's KMS key limits and (negligibly) billing until then. **This does NOT block re-running `terraform apply` with the same `account_name` right after a `destroy`**, and it does not need a manual workaround — verified against AWS's own KMS documentation: `terraform destroy` deletes the `aws_kms_alias` resource before scheduling the key's deletion (normal reverse-dependency order, since the alias depends on the key), and AWS treats an alias name as immediately reusable the moment `DeleteAlias` succeeds, regardless of what state the key it used to point to is in. A fresh `apply` right after `destroy` creates a new key and successfully claims the same alias name — the old, pending-deletion key is a separate, orphaned resource sitting quietly in the background for the rest of its deletion window, not something blocking the new one.
+
+## The first-ever apply in a real account: a self-reference problem, and how to get past it
+
+This module creates the S3 bucket (`aws_s3_bucket.state`) meant to hold **every** unit's Terraform state in this account — including its own, once `terragrunt/root.hcl`'s generated S3 backend is in effect for it like any other unit. The first time this module is ever applied in a brand-new account, that bucket doesn't exist yet — and it can't be both "created by this `apply`" and "already there to hold this `apply`'s own state" at the same time.
+
+**Using Terragrunt's `--backend-bootstrap` flag does not solve this** — it creates the bucket as a bare, backend-shaped bucket, and then this module's own `aws_s3_bucket.state` resource tries to create that same bucket again and fails with `BucketAlreadyExists` (confirmed by hitting this directly against Floci). The bucket backend-bootstrap creates and the bucket this module manages are the same name, but Terraform doesn't know that — there's no import, just a collision.
+
+**The actual procedure** (the standard "local state first, migrate after" pattern for a module that bootstraps its own backend's infrastructure — this is a real, if under-documented, variant of the general Terraform state-backend chicken-and-egg problem):
+
+1. **First apply with a temporary local backend.** Override `foundation`'s `terragrunt.hcl` with a `remote_state { backend = "local" }` block (same shape as `github-oidc`'s — see `terragrunt/live/<account>/<region>/<env>/github-oidc/terragrunt.hcl` for the `get_terragrunt_dir()`-anchored pattern), run `terragrunt apply`. This creates the real S3 bucket as this module's own managed resource, with no backend already pointed at it to conflict with.
+2. **Remove the local backend override**, letting `foundation` fall back to `root.hcl`'s normal generated S3 backend — the same one every other unit uses.
+3. **Migrate state into the bucket `foundation` just created**: `terragrunt init -migrate-state -force-copy` (the `-force-copy` is needed because Terragrunt doesn't forward the interactive "copy existing state?" prompt to its own `--non-interactive` flag — without it, `init -migrate-state` alone hangs waiting for input that never arrives).
+4. **Verify**: `terragrunt plan` should report `No changes` immediately after migrating — if it doesn't, something about the migration didn't carry over cleanly, don't proceed to treat the migration as done.
+
+This is a one-time procedure per account, done by hand by whoever has real credentials for that account's very first `foundation` apply — not something CI ever needs to do, since by the time CI exists for that account, `foundation` (and its bucket) already does too. Validated end-to-end against Floci: local apply (4 resources, no conflict) → remove override → `init -migrate-state -force-copy` → `plan` reports `No changes`.
 
 ## Two ways this module gets its input values — don't confuse them
 

@@ -22,6 +22,8 @@ This module owns identity only. It does **not** grant these roles any permission
 
 Same account-level prerequisites as `account-foundation` — see [its README](../account-foundation/README.md#prerequisites--what-must-already-exist-in-aws-before-running-this-module). This module needs bootstrap credentials for its first apply, same as any other module in this account, before any OIDC-based role exists to hand CI going forward.
 
+**One prerequisite that does NOT carry over**: `account-foundation`'s "first-ever apply" self-reference problem (it creates the bucket its own state is meant to live in, requiring a temporary local backend + `init -migrate-state` dance — see that module's README) does not apply here. This module's Terragrunt unit uses a *permanent* local backend by design (see `terragrunt/live/<account>/<region>/<env>/github-oidc/terragrunt.hcl`'s own comment) — it never joins the shared S3 backend at all, so there's no migration step, ever, for this module.
+
 ## Inputs / Outputs
 
 See [`variables.tf`](./variables.tf) and [`outputs.tf`](./outputs.tf). The one required input is `github_repository` (`"org/repo"` format) — every trust policy is scoped to it, so nothing else can assume these roles regardless of what other AWS-side permissions might exist.

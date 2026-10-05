@@ -86,15 +86,17 @@ terragrunt init
 terragrunt apply
 ```
 
-Then `foundation`, which needs `github-oidc` applied first (its real outputs feed `foundation`'s inputs via a Terragrunt `dependency` block — see `terragrunt/README.md`'s "Dependencies between units"). Unlike `github-oidc`, `foundation` uses the normal shared S3 backend, which doesn't exist yet on a fresh account — pass `--backend-bootstrap` the first time to have Terragrunt create it (confirmed safe here: this is exactly the "bucket doesn't exist yet" case the flag is for, not the ordering problem `github-oidc` has):
+Then `foundation`, which needs `github-oidc` applied first (its real outputs feed `foundation`'s inputs via a Terragrunt `dependency` block — see `terragrunt/README.md`'s "Dependencies between units"). `foundation`'s `plan` alone is safe with `--backend-bootstrap` (it just needs the bucket to exist to read/write a plan's worth of state), and confirms the `dependency` wiring works:
 
 ```sh
 cd ../foundation/
-terragrunt init --backend-bootstrap
-terragrunt apply
+terragrunt init --backend-bootstrap --non-interactive
+terragrunt plan
 ```
 
-Both full lifecycles have been run against this exact Floci stack and confirmed working end to end: `github-oidc` applies cleanly (3 resources), and `foundation`'s plan picks up `github-oidc`'s **real** output ARNs (`arn:aws:iam::111111111111:role/github-actions-plan`/`...-apply`, not `mock_outputs`' placeholder values) — proof the `dependency` block resolves correctly once the dependency has actually been applied, not just that the mock fallback works.
+This has been run against this exact Floci stack and confirmed working: `github-oidc` applies cleanly (3 resources), and `foundation`'s plan picks up `github-oidc`'s **real** output ARNs (`arn:aws:iam::111111111111:role/github-actions-plan`/`...-apply`, not `mock_outputs`' placeholder values) — proof the `dependency` block resolves correctly once the dependency has actually been applied, not just that the mock fallback works.
+
+**`terragrunt apply` on `foundation` is a different story — do not run it with `--backend-bootstrap` expecting it to just work.** `foundation` creates the very S3 bucket `--backend-bootstrap` creates for its backend — the two collide (`BucketAlreadyExists`) the moment `apply` tries to create `aws_s3_bucket.state`, confirmed by hitting this directly in Step 10 of the ROADMAP. See `terraform/modules/account-foundation/README.md`'s "The first-ever apply in a real account" section for the actual procedure (temporary local backend → remove override → `init -migrate-state -force-copy`) before ever running `foundation`'s first real `apply`, here or against real AWS.
 
 ## A real bug this stack caught
 
@@ -121,6 +123,10 @@ The first version of `github-oidc`'s `remote_state { backend = "local" }` block 
 ## A real bug this stack caught: `.tfvars` leaking into `.terragrunt-cache`
 
 Any `terraform.tfvars` left in `terraform/modules/<name>/` for standalone module testing (per that module's README — gitignored, never committed) gets silently copied along with the rest of the module source into `.terragrunt-cache` every time Terragrunt downloads that module as a unit's `source`. Terraform loads any `terraform.tfvars` it finds in its working directory automatically, with no flag required — so a value meant only for isolated `terraform plan -var-file=terraform.tfvars.example` testing (e.g. a placeholder `kms_key_administrator_arns` ARN) silently leaked into a real `terragrunt plan` on `foundation` run from this stack, producing a plan that didn't match what `env.hcl` actually specified. There's no Terragrunt-level fix for this in v1.1.6 (no per-unit `exclude_from_copy` for arbitrary files) — the only mitigation is discipline: don't leave a real `terraform.tfvars` sitting in a module directory once you're done testing it standalone, especially if you're about to run `terragrunt plan`/`apply` on a unit that uses that same module as its `source`.
+
+## A real bug this stack caught: `foundation`'s self-reference on its first-ever apply
+
+`foundation` creates the S3 bucket meant to hold every unit's Terraform state in the account — including its own. Using `terragrunt init --backend-bootstrap` to work around the "bucket doesn't exist yet" problem (the same flag that's genuinely fine for a `plan`, see above) breaks the moment a real `apply` runs: `--backend-bootstrap` creates a bare bucket for the backend, then `foundation`'s own `aws_s3_bucket.state` resource tries to create that same bucket again and fails with `BucketAlreadyExists` — confirmed by hitting it directly, during Phase 2's provider-upgrade validation (ROADMAP.md Step 10). Resolved with the standard "local state first, migrate after" pattern — the full procedure (and why it's a one-time, by-hand thing, never something CI does) is in `terraform/modules/account-foundation/README.md`'s "The first-ever apply in a real account" section.
 
 ## Ports
 
