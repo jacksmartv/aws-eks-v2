@@ -32,7 +32,8 @@ aws-eks-base-v2/
 │   └── apps/              # Platform addons (Karpenter, cert-manager, ESO, ...), one directory each
 ├── docs/
 │   └── optional-patterns/ # Documented but not shipped: patterns for things deliberately kept out of core
-└── .github/workflows/    # CI: terraform-plan.yml (OIDC + fmt/validate/tflint/trivy + GitOps boundary gate), terraform-apply.yml (OIDC, gated by GitHub Environment)
+├── .github/workflows/    # CI: terraform-plan.yml (OIDC + fmt/validate/tflint/trivy + GitOps boundary gate), terraform-apply.yml (OIDC, gated by GitHub Environment)
+└── local/                # Local dev stack (Floci, a free AWS emulator) — investigation/testing aid, not part of the deployable architecture
 ```
 
 See [MASTERPLAN.md §3](./MASTERPLAN.md) for the full annotated tree and the reasoning behind it.
@@ -65,6 +66,10 @@ terragrunt destroy
 **KMS note**: destroying and immediately re-applying `foundation` in the same account is safe — AWS frees a deleted KMS alias for reuse immediately, even while the key it used to point to sits in `PendingDeletion` for its full deletion window. See `terraform/modules/account-foundation/README.md` for the sourced explanation; this applies identically whether the module is run standalone or through Terragrunt, since it's AWS KMS behavior, not something either tool controls.
 
 Formatting: `terragrunt hcl format` (from the `terragrunt/` directory) formats every `.hcl` file in the tree; `terragrunt hcl format --check --diff` verifies formatting without changing anything (used in CI).
+
+## Local development
+
+[`local/`](./local/) runs [Floci](https://github.com/floci-io/floci), a free local AWS emulator, via Docker Compose — a way to run real `terragrunt plan`/`apply` against every unit in this project (including EKS, once `eks-cluster` exists) with zero AWS cost and zero risk to this project's one real AWS account. See [local/README.md](./local/README.md) for setup, and for two real issues this stack caught early: a broken module `source` path, and a circular state-bucket bootstrap dependency resolved by giving `github-oidc` a permanent local Terraform backend.
 
 ## Continuous integration
 

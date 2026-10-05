@@ -1,0 +1,59 @@
+services:
+  floci:
+    image: floci/floci:latest
+    container_name: aws-eks-v2-floci
+    ports:
+      # The only port that needs an explicit mapping. EKS's k3s API servers
+      # (6500-6599) and every other service-specific range are bound
+      # directly on the host by Docker itself, not proxied through this
+      # container — see local/README.md's "Ports" section.
+      - "4566:4566"
+    volumes:
+      # Docker socket: required in real (non-mock) EKS mode, since Floci
+      # starts one k3s container per cluster via the Docker API. Also used
+      # by Lambda/RDS/ElastiCache/OpenSearch/MSK if those are ever exercised
+      # here. Local investigation stack only — never do this against a
+      # Floci instance reachable from outside this machine.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - floci-data:/app/data
+    environment:
+      # Resolvable hostname other containers on this network use to reach
+      # Floci (affects generated URLs — SQS queue URLs, etc.). Not load-
+      # bearing yet with a single service, but costs nothing to set
+      # correctly now per Floci's own Docker Compose guidance.
+      FLOCI_HOSTNAME: floci
+
+      # Survive `docker compose down`/restarts — state created while
+      # iterating on Terragrunt units (S3 buckets, IAM roles, KMS keys,
+      # EKS clusters) stays put until explicitly reset. See "Resetting the
+      # stack" in local/README.md.
+      FLOCI_STORAGE_MODE: persistent
+      FLOCI_STORAGE_PERSISTENT_PATH: /app/data
+
+      # Synthetic 12-digit account ID, deliberately distinct from the
+      # project's one real AWS account. A 12-digit access key ID routes
+      # requests to this account under Floci's multi-account isolation —
+      # see local/.env.example and local/README.md.
+      FLOCI_DEFAULT_ACCOUNT_ID: "111111111111"
+
+      # Real EKS mode (the default) starts one k3s container per cluster.
+      # Point it at this Compose project's own network so the k3s
+      # container, Floci, and (later) anything else in this stack can all
+      # reach each other by Docker DNS name.
+      FLOCI_SERVICES_EKS_DOCKER_NETWORK: aws-eks-v2-floci-net
+
+      # IRSA end-to-end (OIDC issuer + signing key per cluster) is on by
+      # default and deliberately left on — it's what lets the github-oidc
+      # module's trust-policy pattern be exercised against a real OIDC
+      # flow, not a stub.
+
+    networks:
+      - floci-net
+
+networks:
+  floci-net:
+    name: aws-eks-v2-floci-net
+
+volumes:
+  floci-data:
+    name: aws-eks-v2-floci-data

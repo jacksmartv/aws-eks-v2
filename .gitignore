@@ -10,6 +10,16 @@
 **/.terraform/*
 *.tfstate
 *.tfstate.*
+# Exception: github-oidc's state is kept on local backend PERMANENTLY, by
+# design, not just during bootstrap — see that unit's terragrunt.hcl for
+# why (a real circular dependency: it must apply before account-foundation,
+# which is what creates the shared S3 bucket every other unit's state
+# lives in). Committed because it contains nothing sensitive — only IAM
+# role ARNs and the OIDC provider ID, the same reasoning
+# trussworks/terraform-aws-bootstrap documents for its own permanently-
+# local bootstrap state — and because committing it is what keeps a record
+# of real applied infrastructure from depending on one person's disk.
+!terragrunt/live/nonprod/**/github-oidc/terraform.tfstate
 *.tfstate.backup
 *.tfstate.backup-*
 crash.log

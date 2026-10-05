@@ -83,7 +83,9 @@ Testing this module in isolation with `terraform apply` followed by `terraform d
 
 ## Two ways this module gets its input values — don't confuse them
 
-**1. Standalone testing, via `terraform.tfvars.example`.** Copy it to `terraform.tfvars` (gitignored) and run `terraform plan -var-file=terraform.tfvars` directly from this directory. This is for quickly testing or iterating on the module in isolation, without the rest of the Terragrunt tree existing yet. It is **not** how this module is invoked in the real project.
+**1. Standalone testing, via `terraform.tfvars.example`.** Copy it to `terraform.tfvars` (gitignored) and run `terraform plan -var-file=terraform.tfvars` directly from this directory. This is for quickly testing or iterating on the module in isolation, without the rest of the Terragrunt tree existing yet. It is **not** how this module is invoked in the real project. Either against real AWS, or — at zero cost, with no account needed — against [Floci](../../../local/README.md), this project's local AWS emulator.
+
+**Delete `terraform.tfvars` when you're done testing standalone.** Terragrunt copies this entire directory into `.terragrunt-cache` whenever a Terragrunt unit uses it as `source` — and Terraform loads any `terraform.tfvars` it finds automatically, no flag needed. A real `terraform.tfvars` left here silently contaminates the next `terragrunt plan`/`apply` run on any unit that invokes this module, with no warning that it happened. See [`local/README.md`](../../../local/README.md#a-real-bug-this-stack-caught-tfvars-leaking-into-terragrunt-cache) for how this was actually caught.
 
 **2. The real project, via Terragrunt's `env.hcl` pattern — this is what actually runs.** Every unit in a given environment (`foundation`, `network`, `ecr`, `eks-cluster`, `gitops-bootstrap`) reads its input values from a single shared `env.hcl` file for that environment:
 

@@ -30,7 +30,9 @@ See [`variables.tf`](./variables.tf) and [`outputs.tf`](./outputs.tf). The one r
 
 Same pattern as [`account-foundation`](../account-foundation/README.md#two-ways-this-module-gets-its-input-values--dont-confuse-them):
 
-**1. Standalone testing, via `terraform.tfvars.example`.** Copy it to `terraform.tfvars` (gitignored) and run `terraform plan -var-file=terraform.tfvars` directly from this directory. Useful for iterating on this module in isolation. Not how it's invoked in the real project.
+**1. Standalone testing, via `terraform.tfvars.example`.** Copy it to `terraform.tfvars` (gitignored) and run `terraform plan -var-file=terraform.tfvars` directly from this directory. Useful for iterating on this module in isolation. Not how it's invoked in the real project. Either against real AWS, or — at zero cost, with no account needed — against [Floci](../../../local/README.md), this project's local AWS emulator.
+
+**Delete `terraform.tfvars` when you're done testing standalone** — same reasoning as [`account-foundation`'s README](../account-foundation/README.md#two-ways-this-module-gets-its-input-values--dont-confuse-them): it gets copied into `.terragrunt-cache` with the rest of this directory whenever a unit uses this module as `source`, and Terraform loads it automatically.
 
 **2. The real project, via Terragrunt's `env.hcl` pattern.** `terragrunt/live/<account>/<region>/<env>/github-oidc/terragrunt.hcl` reads `github_repository` from the shared `env.hcl` for that environment — same file every other unit in that environment reads. See `terragrunt/README.md`.
 
