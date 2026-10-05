@@ -79,7 +79,7 @@ terragrunt destroy
 
 `terragrunt render` is the cheapest way to verify a unit is wired correctly — it prints the fully-resolved backend config, generated provider block, and module inputs without touching AWS at all. Run it after changing any `.hcl` file in this tree, before running `plan`.
 
-See the root [`README.md`](../README.md#running-this-project-terragrunt) for the full walkthrough, including the KMS `PendingDeletion` note relevant to `foundation`.
+See the root [`README.md`](../README.md#running-this-project-terragrunt) for the full walkthrough, including the KMS `PendingDeletion` note and the self-reference bootstrap procedure, both relevant to `foundation`'s very first apply in a new account — a plain `terragrunt apply` there, as shown above, is not the right first command.
 
 ## A guard worth understanding: `allowed_account_ids`
 
