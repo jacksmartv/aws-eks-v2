@@ -1,0 +1,37 @@
+# Example variable values for the network module.
+#
+# This file is for standalone testing of this module only (e.g. `terraform
+# plan -var-file=terraform.tfvars.example` from within this directory). It
+# is NOT how this module is actually invoked in the real project — that
+# happens via Terragrunt, which generates inputs from
+# terragrunt/live/<account>/<region>/<env>/env.hcl instead of a .tfvars
+# file. See ROADMAP.md Step 11.
+#
+# Copy this to terraform.tfvars (gitignored) to experiment locally. Delete
+# it when done — see account-foundation's README for why a stray
+# terraform.tfvars left in a module directory silently contaminates any
+# later terragrunt plan/apply that uses this module as source.
+
+name       = "sandbox-dev"
+cidr_block = "10.0.0.0/16"
+
+azs = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+public_subnets   = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
+private_subnets  = ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
+database_subnets = ["10.0.20.0/24", "10.0.21.0/24", "10.0.22.0/24"]
+intra_subnets    = []
+
+nat_topology = "single" # cheapest option; use "per_az" for real environments, "none" to test with no NAT at all
+
+enable_s3_endpoint   = true
+enable_ecr_endpoints = true
+
+additional_vpc_endpoints = {}
+
+flow_logs_retention_days       = 14
+flow_logs_bucket_force_destroy = true # only ever true in a throwaway sandbox account
+
+tags = {
+  ManagedBy = "terraform"
+}

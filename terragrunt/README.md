@@ -14,7 +14,7 @@ terragrunt/
         ├── env.hcl                         # the ONE file that defines this environment's values
         ├── github-oidc/terragrunt.hcl      # invokes terraform/modules/github-oidc — applies FIRST, local state (see below)
         ├── foundation/terragrunt.hcl       # invokes terraform/modules/account-foundation — depends on github-oidc
-        ├── network/terragrunt.hcl          # invokes terraform/modules/network (not yet built)
+        ├── network/terragrunt.hcl          # invokes terraform/modules/network — no dependency block, reads no other unit's outputs
         ├── ecr/terragrunt.hcl              # invokes terraform/modules/ecr-repositories (not yet built)
         ├── eks-cluster/terragrunt.hcl      # invokes terraform/modules/eks-cluster (not yet built)
         └── gitops-bootstrap/terragrunt.hcl # invokes terraform/modules/gitops-bootstrap (not yet built)

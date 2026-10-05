@@ -46,4 +46,21 @@ locals {
   # "org/repo" the OIDC trust policies are scoped to — no other GitHub
   # repository can assume the plan/apply roles this unit creates.
   github_repository = "jacksmartv/aws-eks-v2"
+
+  # --- network module inputs (Step 11) ---
+  network_cidr_block = "10.0.0.0/16"
+  network_azs        = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+  network_public_subnets   = ["10.0.0.0/24", "10.0.1.0/24", "10.0.2.0/24"]
+  network_private_subnets  = ["10.0.10.0/24", "10.0.11.0/24", "10.0.12.0/24"]
+  network_database_subnets = ["10.0.20.0/24", "10.0.21.0/24", "10.0.22.0/24"]
+  network_intra_subnets    = []
+
+  network_nat_topology = "single" # sandbox only — use "per_az" in a real environment
+
+  network_enable_s3_endpoint   = true
+  network_enable_ecr_endpoints = true
+
+  network_flow_logs_retention_days       = 14
+  network_flow_logs_bucket_force_destroy = true # sandbox only — never true in a real environment
 }
