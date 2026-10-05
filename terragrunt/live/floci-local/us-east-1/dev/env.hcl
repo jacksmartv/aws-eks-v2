@@ -51,4 +51,19 @@ locals {
 
   network_flow_logs_retention_days       = 14
   network_flow_logs_bucket_force_destroy = true
+
+  # --- ecr-repositories module inputs (Step 12) ---
+  ecr_repository_names = [
+    "ts-admin-tickets",
+    "front/ts-admin-seated-ticketing",
+  ]
+
+  ecr_namespaces = []
+
+  ecr_image_tag_mutability = "IMMUTABLE"
+  ecr_scan_on_push         = true
+
+  ecr_lifecycle_policy_keep_last_n = 10
+
+  ecr_repository_force_delete = true
 }
