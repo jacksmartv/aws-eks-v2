@@ -1,0 +1,22 @@
+# Secret scanning (ROADMAP.md Step 6): gitleaks runs on every commit,
+# scanning staged changes for hardcoded credentials before they ever reach
+# git history. Added after auditing a real, multi-year production fork of
+# this project turned up several real hardcoded credentials (MongoDB
+# Atlas creds, an SSH private key, AWS key pairs) committed despite the
+# correct pattern (Secrets Manager + External Secrets Operator) already
+# existing in the same codebase — the lesson being that having the right
+# pattern available doesn't stop it from being bypassed under pressure;
+# an automated gate does.
+#
+# This is the local, pre-commit-only layer. The hard CI-level gate
+# (blocking merges outright, plus a one-time full-history scan) is a
+# separate, later addition — see MASTERPLAN.md's Phase 9 scope.
+#
+# No .gitleaks.toml yet — gitleaks' built-in default ruleset works with
+# zero configuration. Add one if/when a real false positive shows up
+# (e.g. an example ARN in a *.tfvars.example file).
+repos:
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.30.1
+    hooks:
+      - id: gitleaks
