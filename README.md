@@ -13,7 +13,7 @@ This is not another EKS Terraform module, and it is not a fork or an incremental
 - **[ADR.md](./ADR.md)** — the architecture decision records. Nine decisions (000–008), each with context, alternatives considered, and consequences. Start with ADR-000 (ownership boundaries) — everything else is checked against it.
 - **[ASSESSMENT.md](./ASSESSMENT.md)** — the Phase 0 assessment that shaped this design: current-state findings and the reasoning behind each decision.
 
-> Note: `ADR.md`, `ASSESSMENT.md`, `MASTERPLAN.md`, and `ROADMAP.md` are intentionally excluded from version control until Phase 1 is validated end-to-end (see `ROADMAP.md`, Step 8, and `.gitignore`). They exist locally as living design documents while implementation is in progress.
+> Note: `ADR.md`, `ASSESSMENT.md`, `MASTERPLAN.md`, and `ROADMAP.md` are intentionally excluded from version control, indefinitely — not a temporary state until some milestone (see `.gitignore`). They exist only as the author's local living design/tracking documents; nothing about the plan they describe lives in this repository's git history, only the actual code it produces.
 
 ## Repository layout
 
